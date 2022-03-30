@@ -77,12 +77,6 @@ class ClientHolder():
         self.weights = weights
         self.Boolean = True
         self.codes_attrsafe = 'code_' + np.array(codes).astype('object') # pandasを使ってhdfを作るとき、数字から始まる列名にできない
-        try:
-            with pd.HDFStore(self.hdffilename) as store:
-                self.df = store["check/"+str(idx)]
-        except:
-            self.df = pd.DataFrame.from_dict(data={i: [0] for i in codes}, orient="index",columns=["activate"])
-            pass
         
         # RSSサーバーに接続し、127個のDDEClientを作る
         self.connect_all()
@@ -108,10 +102,7 @@ class ClientHolder():
             except Exception as e:
                 print(f"an error occurred at code: {code} while connecting server.")
                 pass
-            else:
-                df = self.df
-                #df.loc[code, "activate"] = 0
-                #raise Exception(e)
+            
         return
     
     
@@ -132,6 +123,7 @@ class ClientHolder():
             print(code,"waiting...")
         """  
         if True:
+            val =0
             try:
                 val = client.request("現在値").decode("sjis")         
             except:
@@ -139,10 +131,9 @@ class ClientHolder():
                     f.write(client.request("銘柄名称").decode("sjis"))
                 pass
             else:
-                pass
-        if val == "":
-            with open("shares2.txt", "a",encoding="utf-8") as f:
-                f.write(client.request("銘柄名称").decode("sjis")+ "\n")
+                if val == 0:
+                    with open("shares2.txt", "a",encoding="utf-8") as f:
+                        f.write("error"+ "\n")
 
         return val 
         
@@ -183,7 +174,7 @@ class ClientHolder():
             
         
         prices['time_end'] = np.datetime64(datetime.datetime.now())
-        self.save(prices)
+        #self.save(prices)
         self.firststep = False
         return prices
 
@@ -192,8 +183,9 @@ class ClientHolder():
         """
         取得した株価を保存する
         """
-        self.store.append(self.key_name, pd.DataFrame([data_dict]))
-        
+        self.store.put(self.key_name, pd.DataFrame(data_dict)) #O.K. block0 values
+        return
+
     def get_prices_forever(self):
         """
         継続的に株価を取得して保存し続ける
@@ -215,14 +207,28 @@ class ClientHolder():
                 print(v)
                 
                 #s2 = s2
-                dict = {str(int(self.idx)-126)+"~"+str(int(self.idx)): v}
+                
+                dict = {str(int(int(self.idx)/126)): v}
                 series = pd.Series(dict)
+                time_start, time_end = prices["time_start"], prices["time_end"]
+                self.store.append("time",pd.DataFrame({"time_start":time_start, "time_end": time_end},index = [0]))
+                
+                #辞書形式でhdf5ファイルに保存
+                """
+                with pd.HDFStore("./data/504.hdf5") as store:
+                    temp =store.get("classidx_504")
+                    temp =store.select("classidx_504")
+                    print(temp[0]["504~630"])
+                    293.65325399999983
+                """
+                self.save(series)
+                
+                #index=False
+                """
                 with pd.HDFStore(self.hdffilename) as store:
                     store.put("restore/"+str(self.idx), series)
+                """
                 
-                if self.Boolean:
-                    self.check()
-                self.Boolean = False
                 break
 
     def calc(self,prices):
